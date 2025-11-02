@@ -1,0 +1,30 @@
+[project]
+name = "adt-press-backend"
+version = "0.1.0"
+description = "FastAPI service for orchestrating ADT Press pipeline runs"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "adt-press>=0.1.0",
+    "fastapi>=0.115.5",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.18",
+    "pydantic>=2.11.7",
+    "omegaconf>=2.3.0",
+]
+
+[project.optional-dependencies]
+develop = [
+    "pytest>=8.0.0",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adt_press_backend"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/adt_press_backend", "README.md"]
