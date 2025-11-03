@@ -8,7 +8,19 @@ from omegaconf import DictConfig, OmegaConf
 
 from .models import ConfigMetadata
 
-CONFIG_PATH = Path("config/config.yaml")
+_HERE = Path(__file__).resolve()
+_CANDIDATE_CONFIG_PATHS = [parent / "config/config.yaml" for parent in _HERE.parents[:5]]
+
+try:
+    import adt_press  # type: ignore
+
+    _CANDIDATE_CONFIG_PATHS.append(Path(adt_press.__file__).resolve().parents[1] / "config/config.yaml")
+except ModuleNotFoundError:  # pragma: no cover
+    pass
+
+CONFIG_PATH = next((path for path in _CANDIDATE_CONFIG_PATHS if path.exists()), None)
+if CONFIG_PATH is None:  # pragma: no cover - fail fast in misconfigured environments
+    raise FileNotFoundError("Default config.yaml could not be located; ensure adt-press repo is checked out alongside adt-backend or installed as a package.")
 
 STRATEGY_OPTIONS: Dict[str, List[str]] = {
     "crop_strategy": ["llm", "none"],

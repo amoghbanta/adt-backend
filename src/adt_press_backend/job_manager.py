@@ -11,7 +11,20 @@ from uuid import uuid4
 
 from omegaconf import DictConfig, OmegaConf
 
-from adt_press.pipeline import run_pipeline
+try:
+    from adt_press.pipeline import run_pipeline
+except ModuleNotFoundError:  # pragma: no cover - local development fallback
+    import sys
+    from pathlib import Path
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "adt_press"
+        if candidate.exists():
+            sys.path.insert(0, str(parent))
+            break
+
+    from adt_press.pipeline import run_pipeline  # type: ignore
 
 from .configuration import build_config_metadata, make_runtime_config
 from .models import ConfigMetadata, JobDetail, JobEvent, JobStatus, JobSummary
