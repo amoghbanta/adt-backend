@@ -1,3 +1,18 @@
+"""
+Data models for the ADT Press Backend API.
+
+This module defines the Pydantic models used for request/response validation
+and data serialization throughout the API. All models follow the JSON API
+conventions for consistent client integration.
+
+Models:
+    - JobStatus: Enumeration of possible job states
+    - JobEvent: Individual timestamped event in a job's lifecycle
+    - JobSummary: Lightweight job representation for list views
+    - JobDetail: Complete job information including configuration and events
+    - ConfigMetadata: Configuration schema and available options
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,6 +23,16 @@ from pydantic import BaseModel
 
 
 class JobStatus(str, Enum):
+    """
+    Job execution status enumeration.
+
+    States represent the lifecycle of a document processing job:
+    - PENDING: Job created and queued for execution
+    - RUNNING: Job currently being processed by the pipeline
+    - COMPLETED: Job finished successfully
+    - FAILED: Job encountered an error and could not complete
+    """
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -15,11 +40,40 @@ class JobStatus(str, Enum):
 
 
 class JobEvent(BaseModel):
+    """
+    A timestamped event in a job's execution history.
+
+    Events provide an audit trail of job progression and help with
+    debugging and monitoring.
+
+    Attributes:
+        timestamp: When this event occurred (UTC)
+        message: Human-readable description of the event
+    """
+
     timestamp: datetime
     message: str
 
 
 class JobSummary(BaseModel):
+    """
+    Lightweight job representation for list endpoints.
+
+    This model provides essential job information without the full
+    configuration details, optimized for listing and filtering operations.
+
+    Attributes:
+        id: Unique job identifier (hex UUID)
+        label: Filesystem-safe job label with unique suffix
+        display_label: Original user-provided label
+        status: Current job execution status
+        created_at: When the job was created (UTC)
+        updated_at: Last modification timestamp (UTC)
+        pdf_filename: Original uploaded PDF filename
+        output_dir: Path to job output directory (if processing started)
+        plate_available: Whether a plate.json file exists for editing
+    """
+
     id: str
     label: str
     display_label: str
@@ -32,6 +86,20 @@ class JobSummary(BaseModel):
 
 
 class JobDetail(JobSummary):
+    """
+    Complete job information including configuration and event history.
+
+    Extends JobSummary with full configuration details and execution events,
+    used for single-job detail endpoints.
+
+    Additional Attributes:
+        submitted_overrides: Configuration values provided by the user
+        effective_overrides: Actual overrides applied (includes auto-injected values)
+        resolved_config: Final configuration after merging defaults and overrides
+        events: Chronological list of job lifecycle events
+        error: Error message if job failed (None otherwise)
+    """
+
     submitted_overrides: Dict[str, Any]
     effective_overrides: Dict[str, Any]
     resolved_config: Dict[str, Any]
@@ -40,6 +108,26 @@ class JobDetail(JobSummary):
 
 
 class ConfigMetadata(BaseModel):
+    """
+    Configuration schema and available options for the pipeline.
+
+    Provides clients with information about configurable parameters,
+    valid values, and default settings for job creation.
+
+    Attributes:
+        defaults: Default configuration values from config.yaml
+        strategies: Available strategies for each processing step
+                   (e.g., crop_strategy: ["llm", "none"])
+        render_strategies: Valid rendering approach options
+        layout_types: Available page layout type definitions
+        boolean_flags: Configuration keys that accept boolean values
+        notes: Additional documentation for specific configuration keys
+
+    Note:
+        This metadata is derived from the adt-press pipeline configuration
+        and allows clients to build dynamic configuration UIs.
+    """
+
     defaults: Dict[str, Any]
     strategies: Dict[str, List[str]]
     render_strategies: List[str]
