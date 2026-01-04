@@ -3,7 +3,7 @@ name = "adt-press-backend"
 version = "0.1.0"
 description = "FastAPI service for orchestrating ADT Press pipeline runs"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "adt-press>=0.1.0",
     "fastapi>=0.115.5",
