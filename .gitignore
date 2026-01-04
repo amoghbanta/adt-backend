@@ -1,20 +1,161 @@
+# ======================
+# Python
+# ======================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
 # Virtual environments
 .venv/
 venv/
+ENV/
+env/
 
-# Packaging / build artifacts
-build/
-dist/
+# PyInstaller
+*.manifest
+*.spec
 
-# Local data outputs
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# pytest / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# ======================
+# Local Data / Outputs
+# ======================
 output/
 uploads/
 
-# Misc
-*.log
+# ======================
+# Environment & Secrets
+# ======================
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# SSH keys and certificates
+*.pem
+*.key
+*.pub
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.p12
+*.pfx
+
+# Deploy keys (any file that looks like a private key)
+*_deploy
+*_deploy.pub
+deploy_key*
+*-key
+*_key
+
+# AWS credentials (if accidentally placed here)
+credentials
+.aws/
+
+# ======================
+# Terraform
+# ======================
+
+# Local .terraform directories
+**/.terraform/
+
+# .tfstate files (contain sensitive state)
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude .tfvars files which may contain sensitive data
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform lock file (optional - include if you want consistent provider versions)
+# .terraform.lock.hcl
+
+# Terraform plan files
+*.tfplan
+*.plan
+
+# ======================
+# IDE & Editors
+# ======================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ======================
+# OS Generated
+# ======================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ======================
+# Logs
+# ======================
+*.log
+logs/

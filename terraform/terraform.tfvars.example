@@ -1,0 +1,16 @@
+# AWS Configuration
+aws_profile = "default"
+key_name    = "your-ec2-keypair-name"
+region      = "us-east-1"
+
+# Repository URLs
+repo_url              = "git@github.com:unicef/adt-press.git"
+backend_submodule_url = "git@github.com:amoghbanta/adt-backend.git"
+
+# Secrets - DO NOT COMMIT REAL VALUES
+# Copy this file to terraform.tfvars and fill in your actual values
+openai_api_key = "sk-your-openai-api-key"
+adt_api_key    = "your-secure-api-key-here"
+
+# SSH deploy key is passed via command line:
+# terraform apply -var="ssh_private_key=$(cat /path/to/deploy_key)"
