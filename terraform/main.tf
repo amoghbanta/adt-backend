@@ -109,12 +109,72 @@ resource "aws_instance" "adt_press" {
   }
 }
 
-output "public_ip" {
-  description = "Public IP of the ADT Press instance"
-  value       = aws_instance.adt_press.public_ip
+resource "aws_eip" "adt_press" {
+  instance = aws_instance.adt_press.id
+  domain   = "vpc"
 }
 
-output "app_url" {
-  description = "Convenience URL for the API"
-  value       = "http://${aws_instance.adt_press.public_dns}:${var.app_port}"
+resource "aws_cloudfront_distribution" "adt_press_api" {
+  origin {
+    domain_name = aws_eip.adt_press.public_dns
+    origin_id   = "adt-press-origin"
+
+    custom_origin_config {
+      http_port              = var.app_port
+      https_port             = var.app_port
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "ADT Press API (HTTPS)"
+
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "adt-press-origin"
+
+    forwarded_values {
+      query_string = true
+      headers      = ["*"]
+      
+      cookies {
+        forward = "all"
+      }
+    }
+
+    viewer_protocol_policy = "redirect-to-https"
+    min_ttl                = 0
+    default_ttl            = 0
+    max_ttl                = 0
+  }
+
+  price_class = "PriceClass_100"
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
+    }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+}
+
+output "public_ip" {
+  description = "Public IP (Elastic IP) of the ADT Press instance"
+  value       = aws_eip.adt_press.public_ip
+}
+
+output "app_url_http" {
+  description = "Direct HTTP Access (Port 8000)"
+  value       = "http://${aws_eip.adt_press.public_dns}:${var.app_port}"
+}
+
+output "app_url_https" {
+  description = "CloudFront HTTPS Access (Port 443)"
+  value       = "https://${aws_cloudfront_distribution.adt_press_api.domain_name}"
 }

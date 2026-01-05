@@ -73,7 +73,6 @@ variable "ssh_private_key" {
 variable "openai_api_key" {
   description = "OpenAI API key exported to the service environment."
   type        = string
-  default     = ""
   sensitive   = true
 }
 
