@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .job_manager import JobManager
 from .models import ConfigMetadata, JobDetail, JobSummary
+from .s3_service import generate_presigned_url
 from .utils import ensure_directory
 
 # Initialize FastAPI application with metadata
@@ -399,6 +400,7 @@ def job_status(job_id: str, manager: JobManager = Depends(get_job_manager)) -> D
         "status": job.status,
         "error": job.error,
         "plate_available": job.plate_available,
+        "zip_available": job.zip_available,
     }
 
 
@@ -447,3 +449,41 @@ def job_output(job_id: str, path: str, manager: JobManager = Depends(get_job_man
         raise HTTPException(status_code=404, detail="Output file not found")
 
     return FileResponse(file_path)
+
+
+@app.get("/jobs/{job_id}/download")
+def get_download_url(job_id: str, manager: JobManager = Depends(get_job_manager)) -> Dict[str, Any]:
+    """
+    Get a presigned S3 URL for downloading the job output zip.
+
+    The URL is valid for 60 minutes (3600 seconds).
+
+    Args:
+        job_id: The job whose zip to download
+
+    Returns:
+        Object with download_url and expires_in_seconds
+
+    Raises:
+        HTTPException:
+            - 404 if job not found or zip not available
+
+    Example:
+        GET /jobs/abc123/download
+        Response: {
+            "download_url": "https://s3.amazonaws.com/...",
+            "expires_in_seconds": 3600
+        }
+    """
+    job = manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if not job.s3_key:
+        raise HTTPException(status_code=404, detail="Zip not available for this job")
+    
+    url = generate_presigned_url(job.s3_key, expiration=3600)
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to generate download URL")
+    
+    return {"download_url": url, "expires_in_seconds": 3600}

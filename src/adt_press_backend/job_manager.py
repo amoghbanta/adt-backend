@@ -45,6 +45,7 @@ except ModuleNotFoundError:
 
 from .configuration import build_config_metadata, make_runtime_config
 from .models import ConfigMetadata, JobDetail, JobEvent, JobStatus, JobSummary
+from .s3_service import upload_to_s3, zip_directory
 from .utils import ensure_directory, sanitize_label
 
 
@@ -90,6 +91,8 @@ class JobRecord:
     resolved_config: Dict[str, Any]
     output_dir: Path
     plate_path: Optional[Path] = None
+    zip_path: Optional[Path] = None
+    s3_key: Optional[str] = None
     error: Optional[str] = None
     events: list[JobEvent] = field(default_factory=list)
 
@@ -110,6 +113,7 @@ class JobRecord:
             pdf_filename=self.pdf_filename,
             output_dir=str(self.output_dir),
             plate_available=bool(self.plate_path and self.plate_path.exists()),
+            zip_available=bool(self.s3_key),
         )
 
     def to_detail(self) -> JobDetail:
@@ -127,6 +131,7 @@ class JobRecord:
             resolved_config=self.resolved_config,
             events=self.events,
             error=self.error,
+            s3_key=self.s3_key,
         )
 
 
@@ -393,12 +398,34 @@ class JobManager:
             run_pipeline(runtime_config)
 
             # Check if pipeline generated a plate.json file
-            plate_path = Path(resolved_config["run_output_dir"]) / "plate.json"
+            output_dir = Path(resolved_config["run_output_dir"])
+            plate_path = output_dir / "plate.json"
+            
+            # Get effective_label for zip naming
+            with self._lock:
+                effective_label = self._jobs[job_id].effective_label
+            
+            # Zip the output directory
+            self._append_event(job_id, "Creating zip archive...")
+            zip_path = output_dir.parent / f"{effective_label}.zip"
+            zip_directory(output_dir, zip_path)
+            
+            # Upload to S3
+            self._append_event(job_id, "Uploading to S3...")
+            s3_key = f"jobs/{effective_label}/{effective_label}.zip"
+            upload_success = upload_to_s3(zip_path, s3_key)
+            
+            # Update job with results
+            update_kwargs = {"status": JobStatus.COMPLETED, "zip_path": zip_path}
             if plate_path.exists():
-                self._update_job(job_id, plate_path=plate_path, status=JobStatus.COMPLETED)
+                update_kwargs["plate_path"] = plate_path
+            if upload_success:
+                update_kwargs["s3_key"] = s3_key
+                self._append_event(job_id, "Upload to S3 completed.")
             else:
-                self._update_job(job_id, status=JobStatus.COMPLETED)
-
+                self._append_event(job_id, "S3 upload skipped (not configured or unavailable).")
+            
+            self._update_job(job_id, **update_kwargs)
             self._append_event(job_id, "Pipeline execution completed.")
         except Exception as exc:
             # Capture error and mark job as failed

@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -83,6 +87,60 @@ resource "aws_security_group" "adt_press" {
   }
 }
 
+# Random suffix for unique S3 bucket name
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
+}
+
+# S3 bucket for job output zips
+resource "aws_s3_bucket" "adt_outputs" {
+  bucket = "${var.project_name}-outputs-${random_id.bucket_suffix.hex}"
+}
+
+# Bucket lifecycle - expire objects after 7 days
+resource "aws_s3_bucket_lifecycle_configuration" "adt_outputs" {
+  bucket = aws_s3_bucket.adt_outputs.id
+
+  rule {
+    id     = "expire-old-zips"
+    status = "Enabled"
+    expiration {
+      days = 7
+    }
+  }
+}
+
+# IAM role for EC2 to access S3
+resource "aws_iam_role" "adt_press_ec2" {
+  name = "${var.project_name}-ec2-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "s3_access" {
+  name = "${var.project_name}-s3-access"
+  role = aws_iam_role.adt_press_ec2.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:GetObject"]
+      Resource = "${aws_s3_bucket.adt_outputs.arn}/*"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "adt_press" {
+  name = "${var.project_name}-instance-profile"
+  role = aws_iam_role.adt_press_ec2.name
+}
+
 resource "aws_instance" "adt_press" {
   ami                         = data.aws_ami.al2023.id
   instance_type               = var.instance_type
@@ -90,6 +148,7 @@ resource "aws_instance" "adt_press" {
   vpc_security_group_ids      = [aws_security_group.adt_press.id]
   associate_public_ip_address = true
   key_name                    = var.key_name
+  iam_instance_profile        = aws_iam_instance_profile.adt_press.name
 
   user_data = templatefile("${path.module}/user_data.sh", {
     app_port              = var.app_port
@@ -98,6 +157,7 @@ resource "aws_instance" "adt_press" {
     backend_submodule_url = var.backend_submodule_url
     openai_api_key        = var.openai_api_key
     adt_api_key           = var.adt_api_key
+    s3_bucket_name        = aws_s3_bucket.adt_outputs.bucket
   })
 
   tags = {
@@ -177,4 +237,9 @@ output "app_url_http" {
 output "app_url_https" {
   description = "CloudFront HTTPS Access (Port 443)"
   value       = "https://${aws_cloudfront_distribution.adt_press_api.domain_name}"
+}
+
+output "s3_bucket_name" {
+  description = "S3 bucket for job output zips"
+  value       = aws_s3_bucket.adt_outputs.bucket
 }

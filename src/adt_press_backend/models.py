@@ -83,6 +83,7 @@ class JobSummary(BaseModel):
     pdf_filename: str
     output_dir: Optional[str] = None
     plate_available: bool = False
+    zip_available: bool = False
 
 
 class JobDetail(JobSummary):
@@ -105,6 +106,7 @@ class JobDetail(JobSummary):
     resolved_config: Dict[str, Any]
     events: List[JobEvent]
     error: Optional[str] = None
+    s3_key: Optional[str] = None
 
 
 class ConfigMetadata(BaseModel):

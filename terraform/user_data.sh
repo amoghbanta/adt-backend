@@ -7,6 +7,7 @@ SSH_PRIVATE_KEY="${ssh_private_key}"
 BACKEND_URL="${backend_submodule_url}"
 OPENAI_API_KEY="${openai_api_key}"
 ADT_API_KEY="${adt_api_key}"
+S3_BUCKET_NAME="${s3_bucket_name}"
 
 export HOME=/root
 
@@ -145,6 +146,7 @@ Environment=OUTPUT_DIR=$APP_ROOT/output
 Environment=UPLOAD_DIR=$APP_ROOT/uploads
 Environment=OPENAI_API_KEY=$OPENAI_API_KEY
 Environment=ADT_API_KEY=$ADT_API_KEY
+Environment=S3_BUCKET_NAME=$S3_BUCKET_NAME
 Environment=ADT_PRESS_CONFIG_PATH=$APP_ROOT/config/config.yaml
 ExecStart=$APP_ROOT/.venv/bin/uvicorn adt-backend.src.adt_press_backend.main:app --host 0.0.0.0 --port $APP_PORT
 Restart=always
