@@ -20,6 +20,10 @@ from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +39,22 @@ def _get_s3_client():
     Get or create the S3 client.
 
     Returns:
-        boto3 S3 client or None if credentials are not available
+        boto3 S3 client or None if bucket is not configured
+    
+    Note:
+        We no longer test credentials with list_buckets() because that requires
+        s3:ListAllMyBuckets permission which follows least-privilege principle.
+        Credential errors will surface during actual upload operations.
     """
     global _s3_client
     if _s3_client is None:
+        if not S3_BUCKET_NAME:
+            logger.warning("S3_BUCKET_NAME not configured")
+            return None
         try:
             _s3_client = boto3.client("s3")
-            # Test if credentials are available
-            _s3_client.list_buckets()
-        except (NoCredentialsError, ClientError) as e:
-            logger.warning(f"S3 credentials not available: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to create S3 client: {e}")
             _s3_client = None
     return _s3_client
 
