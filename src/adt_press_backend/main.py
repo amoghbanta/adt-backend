@@ -121,6 +121,22 @@ def healthcheck() -> Dict[str, str]:
 
 # --- Admin Endpoints ---
 
+async def verify_master_key(
+    x_api_key: str = Header(..., alias="X-API-Key"),
+):
+    """
+    Verify the Master API Key for admin actions.
+    """
+    master_key = os.getenv("ADT_API_KEY")
+    if not master_key:
+        # If no master key configured, deny all admin access for safety
+        raise HTTPException(status_code=500, detail="Server misconfiguration: ADT_API_KEY not set")
+    
+    # constant time comparison to prevent timing attacks
+    if not secrets.compare_digest(x_api_key, master_key):
+        raise HTTPException(status_code=401, detail="Invalid Master API Key")
+    return x_api_key
+
 class CreateKeyRequest(BaseModel):
     owner: str
     max_generations: int = 100
@@ -129,10 +145,12 @@ class CreateKeyRequest(BaseModel):
 def create_api_key(
     request: CreateKeyRequest,
     manager: KeyManager = Depends(get_key_manager),
-    _: str | None = Depends(check_rate_limit)
+    _: str = Depends(verify_master_key),
+    __: str | None = Depends(check_rate_limit)
 ):
     """
     Create a new API Key with specified quota.
+    Requires Master Key.
     """
     raw_key, record = manager.create_key(request.owner, request.max_generations)
     return {"api_key": raw_key, "record": record}
@@ -140,18 +158,20 @@ def create_api_key(
 @app.get("/admin/keys")
 def list_api_keys(
     manager: KeyManager = Depends(get_key_manager),
-    _: str | None = Depends(check_rate_limit)
+    _: str = Depends(verify_master_key),
+    __: str | None = Depends(check_rate_limit)
 ):
-    """List all API keys."""
+    """List all API keys (Requires Master Key)."""
     return manager.list_keys()
 
 @app.delete("/admin/keys/{key_id}")
 def revoke_api_key(
     key_id: str, 
     manager: KeyManager = Depends(get_key_manager),
-    _: str | None = Depends(check_rate_limit)
+    _: str = Depends(verify_master_key),
+    __: str | None = Depends(check_rate_limit)
 ):
-    """Revoke an API key."""
+    """Revoke an API key (Requires Master Key)."""
     if manager.revoke_key(key_id):
         return {"status": "revoked"}
     raise HTTPException(status_code=404, detail="Key not found")
