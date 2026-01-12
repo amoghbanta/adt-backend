@@ -110,6 +110,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "adt_outputs" {
   }
 }
 
+# CORS configuration to allow browser downloads via fetch()
+resource "aws_s3_bucket_cors_configuration" "adt_outputs" {
+  bucket = aws_s3_bucket.adt_outputs.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"] # Allow all origins for simplicity, or restrict to specific domains
+    expose_headers  = []
+    max_age_seconds = 3000
+  }
+}
+
 # IAM role for EC2 to access S3
 resource "aws_iam_role" "adt_press_ec2" {
   name = "${var.project_name}-ec2-role"
