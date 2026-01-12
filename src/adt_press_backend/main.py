@@ -30,6 +30,13 @@ from .utils import ensure_directory
 from .key_manager import KeyManager, APIKeyRecord
 from .middleware import RateLimiter
 
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+import os
+import secrets
+
 # Initialize FastAPI application with metadata
 app = FastAPI(title="ADT Press API", version="0.1.0")
 
