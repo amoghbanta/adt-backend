@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import os
 import secrets
+import shutil
+import uuid
 
 # Initialize FastAPI application with metadata
 app = FastAPI(title="ADT Press API", version="0.1.0")
@@ -362,3 +364,22 @@ def get_download_url(
         raise HTTPException(status_code=500, detail="Failed to generate download URL")
     
     return {"download_url": url, "expires_in_seconds": 3600}
+
+async def _store_upload(upload_file: UploadFile) -> Path:
+    """
+    Store uploaded file to a temporary location and return the path.
+    """
+    upload_dir = Path("data/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Use UUID to prevent filename collisions
+    filename = f"{uuid.uuid4()}_{upload_file.filename}"
+    file_path = upload_dir / filename
+    
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(upload_file.file, buffer)
+    finally:
+        await upload_file.close()
+        
+    return file_path
