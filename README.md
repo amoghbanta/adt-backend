@@ -1,6 +1,6 @@
 # ADT Press Backend
 
-> A FastAPI service for orchestrating the ADT (Accessible Document Transformation) Press pipeline
+> A FastAPI service for orchestrating the ADT Press pipeline
 
 ## Overview
 
