@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .job_manager import JobManager
-from .models import ConfigMetadata, JobDetail, JobSummary
+from .models import ConfigMetadata, JobDetail, JobSummary, RegenerateRequest
 from .s3_service import generate_presigned_url
 from .utils import ensure_directory
 from .key_manager import KeyManager, APIKeyRecord
@@ -294,6 +294,68 @@ async def update_plate(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     return {"status": "saved"}
+
+
+@app.post("/jobs/{job_id}/regenerate", response_model=JobSummary)
+async def regenerate_job(
+    job_id: str,
+    request: RegenerateRequest,
+    manager: JobManager = Depends(get_job_manager),
+    key_mgr: KeyManager = Depends(get_key_manager),
+    key_record: APIKeyRecord = Depends(verify_quota),
+) -> JobSummary:
+    """
+    Regenerate or edit specific sections of a completed job.
+
+    This endpoint creates a new job that reuses the source job's PDF and
+    configuration, but regenerates or edits only the specified sections.
+
+    Args:
+        job_id: The ID of the completed job to regenerate from
+        request: RegenerateRequest containing sections to regenerate/edit
+
+    Returns:
+        JobSummary of the newly created regeneration job
+
+    Raises:
+        400: If neither regenerate_sections nor edit_sections provided
+        404: If source job not found
+        409: If source job is not in COMPLETED status
+    """
+    # Validate that at least one operation is specified
+    if not request.regenerate_sections and not request.edit_sections:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of regenerate_sections or edit_sections must be provided",
+        )
+
+    # Check for overlapping section IDs
+    if request.regenerate_sections and request.edit_sections:
+        overlap = set(request.regenerate_sections) & set(request.edit_sections.keys())
+        if overlap:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Sections cannot be in both regenerate and edit lists: {overlap}",
+            )
+
+    # Increment usage quota
+    if not key_mgr.increment_usage(key_record.id):
+        raise HTTPException(status_code=429, detail="Quota exceeded")
+
+    try:
+        summary = manager.regenerate_job(
+            source_job_id=job_id,
+            regenerate_sections=request.regenerate_sections,
+            edit_sections=request.edit_sections,
+        )
+        return summary
+    except ValueError as exc:
+        error_msg = str(exc)
+        if "not found" in error_msg:
+            raise HTTPException(status_code=404, detail=error_msg) from exc
+        if "must be completed" in error_msg:
+            raise HTTPException(status_code=409, detail=error_msg) from exc
+        raise HTTPException(status_code=400, detail=error_msg) from exc
 
 
 @app.get("/jobs/{job_id}/status")

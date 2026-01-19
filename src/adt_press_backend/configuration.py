@@ -70,6 +70,8 @@ NOTES = {
     "label": "Used to namespace the run_output_dir; we append a job suffix to keep runs unique.",
     "pdf_path": "Injected automatically from the uploaded file.",
     "page_range": "Inclusive start/end; leave zeros to process the full document.",
+    "regenerate_sections": "List of section IDs to regenerate from scratch (e.g., ['sec_page_5_s0']). Used via /jobs/{job_id}/regenerate endpoint.",
+    "edit_sections": "Dict mapping section IDs to edit instructions (e.g., {'sec_page_5_s0': 'make title bigger'}). Used via /jobs/{job_id}/regenerate endpoint.",
 }
 
 

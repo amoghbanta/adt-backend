@@ -370,6 +370,62 @@ class JobManager:
 
         return record.to_summary()
 
+    def regenerate_job(
+        self,
+        source_job_id: str,
+        regenerate_sections: list[str],
+        edit_sections: dict[str, str],
+    ) -> JobSummary:
+        """
+        Create a new job that regenerates/edits specific sections from an existing job.
+
+        This method:
+        1. Retrieves the source job's configuration and PDF
+        2. Creates a new job with the same base config
+        3. Adds regenerate_sections and/or edit_sections parameters
+        4. Submits the new job for execution
+
+        Args:
+            source_job_id: ID of the completed job to regenerate from
+            regenerate_sections: List of section IDs to regenerate from scratch
+            edit_sections: Dict mapping section IDs to edit instructions
+
+        Returns:
+            JobSummary of the newly created regeneration job
+
+        Raises:
+            ValueError: If source job not found or not in COMPLETED status
+            ValueError: If neither regenerate_sections nor edit_sections provided
+        """
+        # Validate input
+        if not regenerate_sections and not edit_sections:
+            raise ValueError("At least one of regenerate_sections or edit_sections must be provided")
+
+        # Get source job
+        with self._lock:
+            source_record = self._jobs.get(source_job_id)
+
+        if not source_record:
+            raise ValueError(f"Source job {source_job_id} not found")
+
+        if source_record.status != JobStatus.COMPLETED:
+            raise ValueError(f"Source job must be completed (current status: {source_record.status})")
+
+        # Build overrides from source job's submitted overrides plus regeneration params
+        overrides = dict(source_record.submitted_overrides)
+        if regenerate_sections:
+            overrides["regenerate_sections"] = regenerate_sections
+        if edit_sections:
+            overrides["edit_sections"] = edit_sections
+
+        # Create new job with same PDF but new regeneration parameters
+        return self.create_job(
+            display_label=f"{source_record.display_label} (regenerated)",
+            pdf_filename=source_record.pdf_filename,
+            pdf_path=source_record.pdf_path,
+            overrides=overrides,
+        )
+
     def _run_pipeline(self, job_id: str) -> None:
         """
         Execute the ADT Press pipeline for a job (runs in background thread).

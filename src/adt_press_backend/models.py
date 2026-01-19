@@ -136,3 +136,25 @@ class ConfigMetadata(BaseModel):
     layout_types: Dict[str, Any]
     boolean_flags: List[str]
     notes: Dict[str, str]
+
+
+class RegenerateRequest(BaseModel):
+    """
+    Request model for regenerating or editing specific sections of a completed job.
+
+    This allows users to selectively regenerate or edit pages without
+    re-running the entire pipeline from scratch.
+
+    Attributes:
+        regenerate_sections: List of section IDs to regenerate from scratch.
+                            Format: ["sec_page_5_s0", "sec_page_7_s1"]
+        edit_sections: Dict mapping section IDs to natural language edit instructions.
+                      Format: {"sec_page_5_s0": "make the title bigger"}
+
+    Note:
+        At least one of regenerate_sections or edit_sections must be provided.
+        A section cannot appear in both lists simultaneously.
+    """
+
+    regenerate_sections: List[str] = []
+    edit_sections: Dict[str, str] = {}
