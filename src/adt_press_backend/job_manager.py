@@ -44,6 +44,7 @@ except ModuleNotFoundError:
     from adt_press.pipeline import run_pipeline  # type: ignore
 
 from .configuration import build_config_metadata, make_runtime_config
+from .database import JobDatabase
 from .models import ConfigMetadata, JobDetail, JobEvent, JobStatus, JobSummary
 from .s3_service import upload_to_s3, zip_directory
 from .utils import ensure_directory, sanitize_label
@@ -159,6 +160,7 @@ class JobManager:
         output_root: Path | None = None,
         upload_root: Path | None = None,
         max_workers: int = 1,
+        db_path: Path | None = None,
     ) -> None:
         """
         Initialize the job manager.
@@ -167,6 +169,7 @@ class JobManager:
             output_root: Base directory for job outputs (default: ./output)
             upload_root: Base directory for uploads (default: ./uploads)
             max_workers: Number of concurrent pipeline executions (default: 1)
+            db_path: Path to SQLite database (default: data/jobs.db)
 
         Note:
             Setting max_workers > 1 enables parallel job processing but may
@@ -179,6 +182,85 @@ class JobManager:
         self._lock = Lock()
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         self._config_metadata: ConfigMetadata | None = None
+
+        # Initialize database and load existing jobs
+        self._db = JobDatabase(db_path) if db_path else JobDatabase()
+        self._load_jobs_from_db()
+
+    def _load_jobs_from_db(self) -> None:
+        """
+        Load all jobs from the database into memory.
+
+        This is called during initialization to restore job state
+        after a server restart.
+        """
+        try:
+            job_dicts = self._db.list_jobs()
+            for job_data in job_dicts:
+                # Create a minimal JobRecord from database data
+                # Note: runtime_config is not persisted, so we create a dummy one
+                record = JobRecord(
+                    id=job_data["id"],
+                    display_label=job_data["display_label"],
+                    effective_label=job_data["effective_label"],
+                    status=JobStatus(job_data["status"]),
+                    created_at=job_data["created_at"],
+                    updated_at=job_data["updated_at"],
+                    pdf_filename=job_data["pdf_filename"],
+                    pdf_path=job_data["pdf_path"],
+                    submitted_overrides=job_data["submitted_overrides"],
+                    overrides=job_data["overrides"],
+                    runtime_config=OmegaConf.create({}),  # Not used for loaded jobs
+                    resolved_config=job_data["resolved_config"],
+                    output_dir=job_data["output_dir"],
+                    plate_path=job_data["plate_path"],
+                    zip_path=job_data["zip_path"],
+                    s3_key=job_data["s3_key"],
+                    error=job_data["error"],
+                    events=[
+                        JobEvent(timestamp=e["timestamp"], message=e["message"])
+                        for e in job_data["events"]
+                    ],
+                )
+                self._jobs[record.id] = record
+        except Exception as e:
+            # Log error but don't fail startup
+            import logging
+            logging.warning(f"Failed to load jobs from database: {e}")
+
+    def _save_job_to_db(self, record: JobRecord) -> None:
+        """
+        Save a job record to the database.
+
+        Args:
+            record: The job record to save
+        """
+        try:
+            self._db.save_job({
+                "id": record.id,
+                "display_label": record.display_label,
+                "effective_label": record.effective_label,
+                "status": record.status.value,
+                "created_at": record.created_at,
+                "updated_at": record.updated_at,
+                "pdf_filename": record.pdf_filename,
+                "pdf_path": record.pdf_path,
+                "submitted_overrides": record.submitted_overrides,
+                "overrides": record.overrides,
+                "resolved_config": record.resolved_config,
+                "output_dir": record.output_dir,
+                "plate_path": record.plate_path,
+                "zip_path": record.zip_path,
+                "s3_key": record.s3_key,
+                "error": record.error,
+                "events": [
+                    {"timestamp": e.timestamp, "message": e.message}
+                    for e in record.events
+                ],
+            })
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to save job {record.id} to database: {e}")
 
     def list_jobs(self) -> list[JobSummary]:
         """
@@ -213,7 +295,7 @@ class JobManager:
 
     def _register_job(self, record: JobRecord) -> None:
         """
-        Register a new job in the internal registry.
+        Register a new job in the internal registry and persist to database.
 
         Args:
             record: The job record to register
@@ -223,6 +305,7 @@ class JobManager:
         """
         with self._lock:
             self._jobs[record.id] = record
+        self._save_job_to_db(record)
 
     def _update_job(self, job_id: str, **kwargs: Any) -> None:
         """
@@ -243,6 +326,8 @@ class JobManager:
             for key, value in kwargs.items():
                 setattr(record, key, value)
             record.updated_at = datetime.utcnow()
+            # Persist to database
+            self._save_job_to_db(record)
 
     def _append_event(self, job_id: str, message: str) -> None:
         """
@@ -260,6 +345,8 @@ class JobManager:
             record = self._jobs[job_id]
             record.events.append(event)
             record.updated_at = event.timestamp
+            # Persist to database
+            self._save_job_to_db(record)
 
     def _persist_config(self, record: JobRecord) -> None:
         """
