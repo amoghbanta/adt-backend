@@ -179,7 +179,19 @@ def make_runtime_config(overrides: Dict[str, Any]) -> DictConfig:
     # Enable struct mode to prevent unknown configuration keys
     OmegaConf.set_struct(base, True)
 
+    # Extract dynamic dict fields that have arbitrary keys (like section IDs)
+    # These must be handled separately to avoid struct mode rejecting unknown keys
+    dynamic_fields = {}
+    for key in ["edit_sections", "regenerate_sections"]:
+        if key in overrides:
+            dynamic_fields[key] = overrides.pop(key)
+
     # Create config from user overrides and merge with base
     cli_config = OmegaConf.create(overrides)
     merged = DictConfig(OmegaConf.merge(base, cli_config))
+
+    # Re-add dynamic fields after merge (bypassing struct mode)
+    for key, value in dynamic_fields.items():
+        OmegaConf.update(merged, key, value, force_add=True)
+
     return merged

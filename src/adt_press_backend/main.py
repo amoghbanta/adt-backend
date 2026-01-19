@@ -24,12 +24,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .job_manager import JobManager
-from .models import ConfigMetadata, JobDetail, JobSummary, RegenerateRequest
+from .models import ConfigMetadata, JobDetail, JobSummary, RegenerateRequest, SectionEditRequest, SectionEditResponse
 from .s3_service import generate_presigned_url
 from .utils import ensure_directory
 from .key_manager import KeyManager, APIKeyRecord
 from .middleware import RateLimiter
+from .configuration import CONFIG_PATH, get_default_config_container
 
+import instructor
+from banks import Prompt
+from litellm import acompletion
 import json
 import logging
 from pathlib import Path
@@ -426,6 +430,128 @@ def get_download_url(
         raise HTTPException(status_code=500, detail="Failed to generate download URL")
     
     return {"download_url": url, "expires_in_seconds": 3600}
+
+# --- Section Edit Endpoint ---
+
+def _get_instructor_client():
+    """
+    Return an Instructor-wrapped LiteLLM client that prefers JSON-schema modes.
+    """
+    mode_candidates = [
+        "JSON_SCHEMA",
+        "JSON",
+        "OPENAI_RESPONSE_FORMAT",
+    ]
+
+    for attr in mode_candidates:
+        mode = getattr(instructor.Mode, attr, None)
+        if mode is not None:
+            return instructor.from_litellm(acompletion, mode=mode)
+
+    return instructor.from_litellm(acompletion)
+
+
+def _load_web_edit_config() -> dict:
+    """
+    Load the web_edit configuration including model and template.
+    Returns dict with 'model', 'template', 'max_retries', 'timeout'.
+    """
+    config = get_default_config_container(resolve=True)
+    web_edit_config = config.get("prompts", {}).get("web_edit", {})
+    default_model = config.get("default_model", "gpt-4o")
+
+    # Resolve model - if "default", use the default_model setting
+    model = web_edit_config.get("model", "default")
+    if model == "default":
+        model = default_model
+
+    # Load template
+    template_path_str = web_edit_config.get("template_path", "prompts/web_edit.jinja2")
+    # CONFIG_PATH points to config/config.yaml, so parent.parent is the adt-press root
+    adt_press_root = CONFIG_PATH.parent.parent
+    template_path = adt_press_root / template_path_str
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"Web edit prompt template not found at {template_path}")
+
+    template_content = template_path.read_text(encoding="utf-8")
+
+    return {
+        "model": model,
+        "template": template_content,
+        "max_retries": web_edit_config.get("max_retries", 3),
+        "timeout": web_edit_config.get("timeout", 120),
+    }
+
+
+class _WebEditLLMResponse(BaseModel):
+    """Internal response model for LLM output with validation."""
+    html: str
+    reasoning: str
+
+
+@app.post("/sections/edit", response_model=SectionEditResponse)
+async def edit_section(
+    request: SectionEditRequest,
+    _: APIKeyRecord = Depends(require_api_key)
+) -> SectionEditResponse:
+    """
+    Stateless section editing endpoint.
+
+    Takes HTML content and an edit instruction, returns updated HTML.
+    No job context or server-side state required.
+
+    Args:
+        request: SectionEditRequest with html, edit_instruction, and optional context
+
+    Returns:
+        SectionEditResponse with updated html and reasoning
+
+    Raises:
+        400: If the request is invalid
+        500: If the LLM call fails
+    """
+    try:
+        # Load config and prompt template
+        web_edit_config = _load_web_edit_config()
+        prompt = Prompt(web_edit_config["template"])
+
+        # Build context for the prompt
+        context = {
+            "section_id": request.section_id,
+            "existing_html": request.html,
+            "edit_instruction": request.edit_instruction,
+            "section_type": request.section_type,
+            "page_number": request.page_number,
+            "language": request.language,
+        }
+
+        # Get instructor client
+        client = _get_instructor_client()
+
+        # Call LLM
+        response: _WebEditLLMResponse = await client.chat.completions.create(
+            model=web_edit_config["model"],
+            response_model=_WebEditLLMResponse,
+            messages=[m.model_dump(exclude_none=True) for m in prompt.chat_messages(context)],
+            max_retries=web_edit_config["max_retries"],
+            timeout=web_edit_config["timeout"],
+        )
+
+        return SectionEditResponse(
+            html=response.html,
+            reasoning=response.reasoning,
+        )
+
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        logging.exception("Failed to edit section")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to edit section: {str(exc)}"
+        ) from exc
+
 
 async def _store_upload(upload_file: UploadFile) -> Path:
     """

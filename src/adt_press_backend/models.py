@@ -158,3 +158,40 @@ class RegenerateRequest(BaseModel):
 
     regenerate_sections: List[str] = []
     edit_sections: Dict[str, str] = {}
+
+
+class SectionEditRequest(BaseModel):
+    """
+    Request model for stateless section editing.
+
+    This allows clients to send HTML content and receive edited HTML back
+    without requiring job context or server-side state.
+
+    Attributes:
+        html: The current HTML content to edit
+        edit_instruction: Natural language instruction for how to modify the content
+        section_id: The section ID (for context in LLM prompt)
+        section_type: Type of section (e.g., "content", "activity"). Defaults to "content"
+        page_number: Page number for context. Defaults to 1
+        language: Language of the content. Defaults to "English"
+    """
+
+    html: str
+    edit_instruction: str
+    section_id: str
+    section_type: str = "content"
+    page_number: int = 1
+    language: str = "English"
+
+
+class SectionEditResponse(BaseModel):
+    """
+    Response model for stateless section editing.
+
+    Attributes:
+        html: The updated HTML content after applying the edit
+        reasoning: Explanation of what changes were made and why
+    """
+
+    html: str
+    reasoning: str
