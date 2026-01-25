@@ -456,7 +456,9 @@ def _load_web_edit_config() -> dict:
     Load the web_edit configuration including model and template.
     Returns dict with 'model', 'template', 'max_retries', 'timeout'.
     """
-    config = get_default_config_container(resolve=True)
+    # Use resolve=False to avoid resolving job-specific interpolations like ${pdf_path}
+    # The web_edit config values don't depend on those interpolations
+    config = get_default_config_container(resolve=False)
     web_edit_config = config.get("prompts", {}).get("web_edit", {})
     default_model = config.get("default_model", "gpt-4o")
 
