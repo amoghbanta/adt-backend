@@ -3,17 +3,34 @@ Pytest configuration and fixtures for ADT Press Backend tests.
 """
 
 import os
+import sys
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
+
+# Mock external dependencies before they are imported
+# This is necessary because the backend imports adt_press.pipeline which requires litellm
+mock_litellm = MagicMock()
+sys.modules["litellm"] = mock_litellm
+sys.modules["instructor"] = MagicMock()
+sys.modules["banks"] = MagicMock()
+
+# Mock adt_press pipeline
+mock_pipeline = MagicMock()
+mock_pipeline.run_pipeline = MagicMock()
+mock_adt_press = MagicMock()
+mock_adt_press.__file__ = "/mock/adt_press/__init__.py"
+sys.modules["adt_press"] = mock_adt_press
+sys.modules["adt_press.pipeline"] = mock_pipeline
 
 # Set test environment variables before importing the app
 os.environ["ADT_API_KEY"] = "test-master-key-12345"
 os.environ["OUTPUT_DIR"] = tempfile.mkdtemp(prefix="adt_test_output_")
 os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="adt_test_uploads_")
 
+from fastapi.testclient import TestClient
 from adt_press_backend.main import app, job_manager, key_manager
 
 
